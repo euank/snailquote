@@ -1,0 +1,16 @@
+language: rust
+branches:
+  only:
+  - master
+  - dev
+rust:
+  - stable
+  - nightly
+
+env:
+  global:
+  - RUST_BACKTRACE=1
+
+script:
+- cargo build --verbose --examples
+- cargo test -v
