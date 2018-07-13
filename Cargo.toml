@@ -1,7 +1,13 @@
 [package]
 name = "snailquote"
+description = "Escape and unescape strings with shell-inspired quoting"
 version = "0.1.0"
 authors = ["Euan Kemp <euank@euank.com>"]
+homepage = "https://github.com/euank/snailquote"
+repository = "https://github.com/euank/snailquote"
+readme = "README.md"
+keywords = ["quote", "escape", "shell-escape", "uenscape"]
+license = "GPL-3.0-only"
 
 [dependencies]
 unicode_categories = "0.1.1"
