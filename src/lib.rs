@@ -5,7 +5,6 @@ extern crate unicode_categories;
 
 use std::borrow::Cow;
 use std::{char, str};
-use std::iter::Enumerate;
 use unicode_categories::UnicodeCategories;
 
 // escape performs some minimal 'shell-like' escaping on a given string
@@ -141,8 +140,15 @@ pub fn unescape(s: &str) -> Result<String, String> {
     Ok(res)
 }
 
-// TODO: this type signature is needlessly specific
-fn parse_unicode(chars: &mut Enumerate<str::Chars>) -> Result<char, String> {
+// parse_unicode takes an iterator over characters and attempts to extract a single unicode
+// character from it.
+// It parses escapes of the form '\u{65b9}', but this internal helper function expects the cursor
+// to be advanced to between the 'u' and '{'.
+// It also expects to be passed an iterator which includes the index for the purpose of advancing
+// it  as well, such as is produced by enumerate.
+fn parse_unicode<'a, I>(chars: &mut I) -> Result<char, String> 
+    where I: Iterator<Item = (usize, char)>
+{
     match chars.next() {
         Some((_, '{')) => {}
         _ => {
