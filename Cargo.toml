@@ -8,6 +8,7 @@ repository = "https://github.com/euank/snailquote"
 readme = "README.md"
 keywords = ["quote", "escape", "shell-escape", "uenscape"]
 license = "GPL-3.0-only"
+edition = "2018"
 
 [dependencies]
 unicode_categories = "0.1.1"
