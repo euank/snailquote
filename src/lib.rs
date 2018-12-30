@@ -13,21 +13,15 @@ pub fn escape(s: &str) -> Cow<str> {
     let mut single_quotable = true;
 
     for c in s.chars() {
-        if c == '\'' {
-            single_quotable = false;
-            needs_escaping = true;
-        } else if c == '\\' {
+        if c == '\'' || c == '\\'  {
             single_quotable = false;
             needs_escaping = true;
         } else if c == '"' {
             needs_escaping = true;
-        } else if c.is_whitespace() {
-            single_quotable = false;
-            needs_escaping = true;
-        } else if c.is_separator() {
-            single_quotable = false;
-            needs_escaping = true;
-        } else if c.is_other() {
+        } else if c.is_whitespace() ||
+                  c.is_separator() ||
+                  c.is_other()
+        {
             single_quotable = false;
             needs_escaping = true;
         }
@@ -146,7 +140,7 @@ pub fn unescape(s: &str) -> Result<String, String> {
 // to be advanced to between the 'u' and '{'.
 // It also expects to be passed an iterator which includes the index for the purpose of advancing
 // it  as well, such as is produced by enumerate.
-fn parse_unicode<'a, I>(chars: &mut I) -> Result<char, String> 
+fn parse_unicode<I>(chars: &mut I) -> Result<char, String>
     where I: Iterator<Item = (usize, char)>
 {
     match chars.next() {
@@ -157,13 +151,13 @@ fn parse_unicode<'a, I>(chars: &mut I) -> Result<char, String>
     }
 
     let unicode_seq: String = chars
-        .take_while(|(_, c)| *c != '}')
+        .take_while(|&(_, c)| c != '}')
         .map(|(_, c)| c)
         .collect();
 
     u32::from_str_radix(&unicode_seq, 16)
         .map_err(|e| format!("could not parse {} as u32 hex: {}", unicode_seq, e))
-        .and_then(|u| char::from_u32(u).ok_or(format!("could not parse {} as a unicode char", u)))
+        .and_then(|u| char::from_u32(u).ok_or_else(|| format!("could not parse {} as a unicode char", u)))
 }
 
 #[cfg(test)]
