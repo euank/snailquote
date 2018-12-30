@@ -10,6 +10,15 @@ use unicode_categories::UnicodeCategories;
 /// Escape the provided string with shell-like quoting and escapes.
 /// Strings which do not need to be escaped will be returned unchanged.
 ///
+/// # Details
+///
+/// Escape will prefer to avoid quoting when possible. When quotes are required, it will prefer
+/// single quotes (which have simpler semantics, namely no escaping). In all other cases it will
+/// use double quotes and escape whatever characters it needs to.
+///
+/// For the full list of escapes which will be used, see the table in
+/// [unescape](unescape).
+///
 /// # Examples
 /// ```
 /// use snailquote::escape;
@@ -20,31 +29,43 @@ use unicode_categories::UnicodeCategories;
 /// println!("{}", escape("foo")); // no escapes needed
 /// // foo
 /// # assert_eq!(escape("foo"), "foo");
-/// println!("{}", escape("String with spaces"));
-/// // "String with spaces"
-/// # assert_eq!(escape("String with spaces"), "\"String with spaces\"");
+/// println!("{}", escape("String with spaces")); // single-quoteable
+/// // 'String with spaces'
+/// # assert_eq!(escape("String with spaces"), "'String with spaces'");
+/// println!("{}", escape("東方")); // no escapes needed
+/// // 東方
+/// # assert_eq!(escape("東方"), "東方");
+/// println!("{}", escape("\"new\nline\"")); // escape needed
+/// // "\"new\nline\""
+/// # assert_eq!(escape("\"new\nline\""), "\"\\\"new\\nline\\\"\"");
 /// ```
 // escape performs some minimal 'shell-like' escaping on a given string
 pub fn escape(s: &str) -> Cow<str> {
-    let mut needs_escaping = false;
+    let mut needs_quoting = false;
     let mut single_quotable = true;
 
     for c in s.chars() {
         if c == '\'' || c == '\\' {
             single_quotable = false;
-            needs_escaping = true;
+            needs_quoting = true;
         } else if c == '"' {
-            needs_escaping = true;
+            needs_quoting = true;
+        } else if c == ' ' {
+            // special case; whitespace that can be single quoted.
+            // Other whitespace (e.g. '\t') needs double-quoting escaping, but literal spaces only
+            // need quoting, not escaping.
+            needs_quoting = true;
         } else if c.is_whitespace() || c.is_separator() || c.is_other() {
             single_quotable = false;
-            needs_escaping = true;
+            needs_quoting = true;
         }
-        if needs_escaping && !single_quotable {
+        if needs_quoting && !single_quotable {
+            // We know we'll need double quotes, no need to check further
             break;
         }
     }
 
-    if !needs_escaping {
+    if !needs_quoting {
         return Cow::from(s);
     }
     if single_quotable {
@@ -64,7 +85,7 @@ pub fn escape(s: &str) -> Cow<str> {
             // avoid 'escape_unicode' for ' ' even though it's a separator
             output.push(c);
         } else if c.is_other() || c.is_separator() {
-            output += &c.escape_unicode().to_string();
+            output += &escape_character(c);
         } else {
             output.push(c);
         }
@@ -72,6 +93,27 @@ pub fn escape(s: &str) -> Cow<str> {
 
     output.push('"');
     output.into()
+}
+
+// escape_character is an internal helper method which converts the given unicode character into an
+// escape sequence. It is assumed the character passed in *must* be escaped (e.g. it is some non-printable
+// or unusual character).
+// escape_character will prefer more human readable escapes (e.g. '\n' over '\u{0a}'), but will
+// fall back on dumb unicode escaping.
+// It is similar to rust's "char::escape_default", but supports additional escapes that rust does
+// not. For strings that don't contain these unusual characters, it's identical to 'escape_default'.
+fn escape_character(c: char) -> String {
+    match c {
+        '\u{07}' => "\\a".to_string(),
+        '\u{08}' => "\\b".to_string(),
+        '\u{0b}' => "\\v".to_string(),
+        '\u{0c}' => "\\f".to_string(),
+        '\u{1b}' => "\\e".to_string(),
+        c => {
+            // escape_default does the right thing for \t, \r, \n, and unicode
+            c.escape_default().to_string()
+        }
+    }
 }
 
 /// Parse the provided shell-like quoted string, such as one produced by [escape](escape).
@@ -241,10 +283,23 @@ mod test {
 
     #[test]
     fn test_escape() {
-        let test_cases = vec!["東方", "東方", "\"'", r#""\"'""#, "\\", "\"\\\\\""];
+        let test_cases = vec![
+            ("東方", "東方"),
+            ("\"'", r#""\"'""#),
+            ("\\", "\"\\\\\""),
+            ("spaces only", "'spaces only'"),
+            ("some\ttabs", "\"some\\ttabs\""),
+            ("💩", "💩"),
+            ("\u{202e}RTL", "\"\\u{202e}RTL\""),
+            ("no\u{202b}space", "\"no\\u{202b}space\""),
+            (
+                "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}",
+                "\"\\a\\b\\v\\f\\n\\r\\t\\e\\e\\\\'\\\"\"",
+            ),
+        ];
 
-        for case in test_cases.chunks(2) {
-            assert_eq!(escape(case[0]), case[1].to_string());
+        for (s, expected) in test_cases {
+            assert_eq!(escape(s), expected);
         }
     }
 
