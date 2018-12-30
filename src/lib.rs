@@ -74,8 +74,7 @@ pub fn escape(s: &str) -> Cow<str> {
     output.into()
 }
 
-/// Parse the provided string which is either a shell-like quoted string, or was produced with
-/// [escape](escape).
+/// Parse the provided shell-like quoted string, such as one produced by [escape](escape).
 ///
 /// # Details
 ///
@@ -87,6 +86,26 @@ pub fn escape(s: &str) -> Cow<str> {
 ///
 /// Multiple different quoting styles may be used in one string, for example, the following string
 /// is valid: `'some spaces'_some_unquoted_"and a \t tab"`.
+///
+/// The full set of supported escapes between double quotes may be found below:
+///
+/// | Escape | Unicode | Description |
+/// |--------|---------|-------------|
+/// | \a     | \u{07}  | Bell        |
+/// | \b     | \u{08}  | Backspace   |
+/// | \v     | \u{0B}  | Vertical tab |
+/// | \f     | \u{0C}  | Form feed |
+/// | \n     | \u{0A}  | Newline |
+/// | \r     | \u{0D}  | Carriage return |
+/// | \t     | \u{09}  | Tab
+/// | \e     | \u{1B}  | Escape |
+/// | \E     | \u{1B}  | Escape |
+/// | \\     | \u{5C}  | Backslash |
+/// | \'     | \u{27}  | Single quote |
+/// | \"     | \u{22}  | Double quote |
+/// | \u{XX} | \u{XX}  | Unicode character with hex code XX |
+///
+/// # Errors
 ///
 /// The returned result will contain a human readable error if the string cannot be parsed as a
 /// valid quoted string.
@@ -236,6 +255,14 @@ mod test {
         assert_eq!(unescape("\"\\\\\"'\"\"'"), Ok("\\\"\"".to_string()));
         assert_eq!(unescape("'\"'"), Ok("\"".to_string()));
         assert_eq!(unescape("'\"'"), Ok("\"".to_string()));
+        // Every escape between double quotes
+        assert_eq!(
+            unescape("\"\\a\\b\\v\\f\\n\\r\\t\\e\\E\\\\\\'\\\"\\u{09}\""),
+            Ok(
+                "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}\u{09}"
+                    .to_string()
+            )
+        );
     }
 
     #[test]
