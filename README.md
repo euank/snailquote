@@ -2,6 +2,8 @@
 
 [![Build Status](https://travis-ci.org/euank/snailquote.svg?branch=master)](https://travis-ci.org/euank/snailquote)
 
+[![Docs](https://docs.rs/snailquote/badge.svg)](https://docs.rs/snailquote)
+
 This library provides functions to escape and unescape strings.
 
 It escapes them in a roughly 'sh' compatible way (e.g. double quotes supporting
