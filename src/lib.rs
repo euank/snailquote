@@ -7,21 +7,35 @@ use std::borrow::Cow;
 use std::{char, str};
 use unicode_categories::UnicodeCategories;
 
+/// Escape the provided string with shell-like quoting and escapes.
+/// Strings which do not need to be escaped will be returned unchanged.
+///
+/// # Examples
+/// ```
+/// use snailquote::escape;
+/// # // The println/assert duplication is because I want to show the output you'd get without
+/// # // rust's string quoting/escaping getting in the way
+/// # // Ideally we could just assert on stdout, not duplicate, see
+/// # // https://github.com/rust-lang/rfcs/issues/2270
+/// println!("{}", escape("foo")); // no escapes needed
+/// // foo
+/// # assert_eq!(escape("foo"), "foo");
+/// println!("{}", escape("String with spaces"));
+/// // "String with spaces"
+/// # assert_eq!(escape("String with spaces"), "\"String with spaces\"");
+/// ```
 // escape performs some minimal 'shell-like' escaping on a given string
 pub fn escape(s: &str) -> Cow<str> {
     let mut needs_escaping = false;
     let mut single_quotable = true;
 
     for c in s.chars() {
-        if c == '\'' || c == '\\'  {
+        if c == '\'' || c == '\\' {
             single_quotable = false;
             needs_escaping = true;
         } else if c == '"' {
             needs_escaping = true;
-        } else if c.is_whitespace() ||
-                  c.is_separator() ||
-                  c.is_other()
-        {
+        } else if c.is_whitespace() || c.is_separator() || c.is_other() {
             single_quotable = false;
             needs_escaping = true;
         }
@@ -34,9 +48,9 @@ pub fn escape(s: &str) -> Cow<str> {
         return Cow::from(s);
     }
     if single_quotable {
-        // all characters should be fine for visual editing
         return format!("'{}'", s).into();
     }
+    // otherwise we need to double quote it
 
     let mut output = String::with_capacity(s.len());
     output.push('"');
@@ -47,6 +61,7 @@ pub fn escape(s: &str) -> Cow<str> {
         } else if c == '\\' {
             output += "\\\\";
         } else if c == ' ' {
+            // avoid 'escape_unicode' for ' ' even though it's a separator
             output.push(c);
         } else if c.is_other() || c.is_separator() {
             output += &c.escape_unicode().to_string();
@@ -59,6 +74,44 @@ pub fn escape(s: &str) -> Cow<str> {
     output.into()
 }
 
+/// Parse the provided string which is either a shell-like quoted string, or was produced with
+/// [escape](escape).
+///
+/// # Details
+///
+/// Unescape is able to handle single quotes (which cannot contain any additional escapes), double
+/// quotes (which may contain a set of escapes similar to ANSI-C, i.e. '\n', '\r', '\'', etc.
+/// Unescape will also parse unicode escapes of the form "\u{01ff}". See
+/// [char::escape_unicode](std::char::EscapeUnicode) in the Rust standard library for more
+/// information on these escapes.
+///
+/// Multiple different quoting styles may be used in one string, for example, the following string
+/// is valid: `'some spaces'_some_unquoted_"and a \t tab"`.
+///
+/// The returned result will contain a human readable error if the string cannot be parsed as a
+/// valid quoted string.
+///
+/// # Examples
+/// ```
+/// use snailquote::unescape;
+/// # // The println/assert duplication is because I want to show the output you'd get without
+/// # // rust's string quoting/escaping getting in the way
+/// # // Ideally we could just assert on stdout, not duplicate, see
+/// # // https://github.com/rust-lang/rfcs/issues/2270
+/// println!("{}", unescape("foo").unwrap());
+/// // foo
+/// # assert_eq!(unescape("foo").unwrap(), "foo");
+/// println!("{}", unescape("'String with spaces'").unwrap());
+/// // String with spaces
+/// # assert_eq!(unescape("'String with spaces'").unwrap(), "String with spaces");
+/// println!("{}", unescape("\"new\\nline\"").unwrap());
+/// // new
+/// // line
+/// # assert_eq!(unescape("\"new\\nline\"").unwrap(), "new\nline");
+/// println!("{}", unescape("'some spaces'_some_unquoted_\"and a \\t tab\"").unwrap());
+/// // some spaces_some_unquoted_and a 	 tab
+/// # assert_eq!(unescape("'some spaces'_some_unquoted_\"and a \\t tab\"").unwrap(), "some spaces_some_unquoted_and a \t tab");
+/// ```
 // TODO: more proper error type
 pub fn unescape(s: &str) -> Result<String, String> {
     let mut in_single_quote = false;
@@ -141,7 +194,8 @@ pub fn unescape(s: &str) -> Result<String, String> {
 // It also expects to be passed an iterator which includes the index for the purpose of advancing
 // it  as well, such as is produced by enumerate.
 fn parse_unicode<I>(chars: &mut I) -> Result<char, String>
-    where I: Iterator<Item = (usize, char)>
+where
+    I: Iterator<Item = (usize, char)>,
 {
     match chars.next() {
         Some((_, '{')) => {}
@@ -157,7 +211,9 @@ fn parse_unicode<I>(chars: &mut I) -> Result<char, String>
 
     u32::from_str_radix(&unicode_seq, 16)
         .map_err(|e| format!("could not parse {} as u32 hex: {}", unicode_seq, e))
-        .and_then(|u| char::from_u32(u).ok_or_else(|| format!("could not parse {} as a unicode char", u)))
+        .and_then(|u| {
+            char::from_u32(u).ok_or_else(|| format!("could not parse {} as a unicode char", u))
+        })
 }
 
 #[cfg(test)]
