@@ -4,6 +4,10 @@ branches:
   - master
   - dev
 rust:
+  # 1.24.1 is temporarily necessary for building because this version of rustc
+  # is what Pop!_OS currently uses because of Ubuntu 18.04 compatiblity, as some
+  # distros do not update rust as often to meet the periodic breaking changes
+  - 1.24.1
   - stable
   - nightly
 
