@@ -84,6 +84,10 @@ pub fn escape(s: &str) -> Cow<str> {
         } else if c == ' ' {
             // avoid 'escape_unicode' for ' ' even though it's a separator
             output.push(c);
+        } else if c == '$' {
+            output += "\\$";
+        } else if c == '`' {
+            output += "\\`";
         } else if c.is_other() || c.is_separator() {
             output += &escape_character(c);
         } else {
@@ -145,6 +149,8 @@ fn escape_character(c: char) -> String {
 /// | \\     | \u{5C}  | Backslash |
 /// | \'     | \u{27}  | Single quote |
 /// | \"     | \u{22}  | Double quote |
+/// | \$     | \u{24}  | Dollar sign (sh compatibility) |
+/// | \`     | \u{60}  | Backtick (sh compatibility) |
 /// | \u{XX} | \u{XX}  | Unicode character with hex code XX |
 ///
 /// # Errors
@@ -213,6 +219,8 @@ pub fn unescape(s: &str) -> Result<String, String> {
                             '\\' => '\\',
                             '\'' => '\'',
                             '"' => '"',
+                            '$' => '$',
+                            '`' => '`',
                             ' ' => ' ',
                             'u' => match parse_unicode(&mut chars) {
                                 Ok(c) => c,
@@ -280,6 +288,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::io::Read;
 
     #[test]
     fn test_escape() {
@@ -292,6 +301,8 @@ mod test {
             ("💩", "💩"),
             ("\u{202e}RTL", "\"\\u{202e}RTL\""),
             ("no\u{202b}space", "\"no\\u{202b}space\""),
+            ("cash $ money $$ \t", "\"cash \\$ money \\$\\$ \\t\""),
+            ("back ` tick `` \t", "\"back \\` tick \\`\\` \\t\""),
             (
                 "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}",
                 "\"\\a\\b\\v\\f\\n\\r\\t\\e\\e\\\\'\\\"\"",
@@ -312,9 +323,9 @@ mod test {
         assert_eq!(unescape("'\"'"), Ok("\"".to_string()));
         // Every escape between double quotes
         assert_eq!(
-            unescape("\"\\a\\b\\v\\f\\n\\r\\t\\e\\E\\\\\\'\\\"\\u{09}\""),
+            unescape("\"\\a\\b\\v\\f\\n\\r\\t\\e\\E\\\\\\'\\\"\\u{09}\\$\\`\""),
             Ok(
-                "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}\u{09}"
+                "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}\u{09}$`"
                     .to_string()
             )
         );
@@ -339,6 +350,41 @@ mod test {
     quickcheck! {
         fn round_trips(s: String) -> bool {
             s == unescape(&escape(&s)).unwrap()
+        }
+    }
+
+
+    #[test]
+    fn test_os_release_parsing() {
+        let tests = vec![
+            ("fedora-19", "Fedora 19 (Schrödinger’s Cat)"),
+            ("fedora-29", "Fedora 29 (Twenty Nine)"),
+            ("gentoo", "Gentoo/Linux"),
+            ("fictional", "Fictional $ OS: ` edition"),
+        ];
+
+        for (file, pretty_name) in tests {
+            let mut data = String::new();
+            std::fs::File::open(format!("./src/testdata/os-releases/{}", file)).unwrap()
+                .read_to_string(&mut data).unwrap();
+
+            let mut found_prettyname = false;
+            // partial os-release parser
+            for line in data.lines() {
+                if line.trim().starts_with("#") {
+                    continue;
+                }
+                let mut iter = line.splitn(2, "=");
+                let key = iter.next().unwrap();
+                let value = iter.next().unwrap();
+                // assert we can parse the value
+                let unescaped = unescape(value).unwrap();
+                if key == "PRETTY_NAME" {
+                    assert_eq!(unescaped, pretty_name);
+                    found_prettyname = true;
+                }
+            }
+            assert!(found_prettyname, "expected os-release to have 'PRETTY_NAME' key");
         }
     }
 }
