@@ -4,7 +4,9 @@ extern crate quickcheck;
 extern crate unicode_categories;
 
 use std::borrow::Cow;
+use std::num::ParseIntError;
 use std::{char, str};
+use thiserror::Error;
 use unicode_categories::UnicodeCategories;
 
 /// Escape the provided string with shell-like quoting and escapes.
@@ -120,6 +122,39 @@ fn escape_character(c: char) -> String {
     }
 }
 
+/// Error type of [unescape](unescape).
+#[derive(Debug, Error, PartialEq)]
+pub enum UnescapeError {
+    #[error("invalid escape {escape} at {index} in {string}")]
+    InvalidEscape {
+        escape: String,
+        index: usize,
+        string: String,
+    },
+    #[error("\\u could not be parsed at {index} in {string}: {source}")]
+    InvalidUnicode {
+        #[source]
+        source: ParseUnicodeError,
+        index: usize,
+        string: String,
+    },
+}
+
+/// Source error type of [UnescapeError::InvalidUnicode](UnescapeError::InvalidUnicode).
+#[derive(Debug, Error, PartialEq)]
+pub enum ParseUnicodeError {
+    #[error("expected '{{' character in unicode escape")]
+    BraceNotFound,
+    #[error("could not parse {string} as u32 hex: {source}")]
+    ParseHexFailed {
+        #[source]
+        source: ParseIntError,
+        string: String,
+    },
+    #[error("could not parse {value} as a unicode char")]
+    ParseUnicodeFailed { value: u32 },
+}
+
 /// Parse the provided shell-like quoted string, such as one produced by [escape](escape).
 ///
 /// # Details
@@ -155,7 +190,7 @@ fn escape_character(c: char) -> String {
 ///
 /// # Errors
 ///
-/// The returned result will contain a human readable error if the string cannot be parsed as a
+/// The returned result can display a human readable error if the string cannot be parsed as a
 /// valid quoted string.
 ///
 /// # Examples
@@ -179,8 +214,7 @@ fn escape_character(c: char) -> String {
 /// // some spaces_some_unquoted_and a 	 tab
 /// # assert_eq!(unescape("'some spaces'_some_unquoted_\"and a \\t tab\"").unwrap(), "some spaces_some_unquoted_and a \t tab");
 /// ```
-// TODO: more proper error type
-pub fn unescape(s: &str) -> Result<String, String> {
+pub fn unescape(s: &str) -> Result<String, UnescapeError> {
     let mut in_single_quote = false;
     let mut in_double_quote = false;
 
@@ -204,7 +238,11 @@ pub fn unescape(s: &str) -> Result<String, String> {
             if c == '\\' {
                 match chars.next() {
                     None => {
-                        return Err(format!("invalid escape at char {} in string {}", idx, s));
+                        return Err(UnescapeError::InvalidEscape {
+                            escape: format!("{}", c),
+                            index: idx,
+                            string: String::from(s),
+                        });
                     }
                     Some((idx, c2)) => {
                         res.push(match c2 {
@@ -222,20 +260,19 @@ pub fn unescape(s: &str) -> Result<String, String> {
                             '$' => '$',
                             '`' => '`',
                             ' ' => ' ',
-                            'u' => match parse_unicode(&mut chars) {
-                                Ok(c) => c,
-                                Err(e) => {
-                                    return Err(format!(
-                                        "\\u could not be parsed at {} in {}: {}",
-                                        idx, s, e
-                                    ));
+                            'u' => parse_unicode(&mut chars).map_err(|x| {
+                                UnescapeError::InvalidUnicode {
+                                    source: x,
+                                    index: idx,
+                                    string: String::from(s),
                                 }
-                            },
+                            })?,
                             _ => {
-                                return Err(format!(
-                                    "invalid escape {}{} at {} in {}",
-                                    c, c2, idx, s
-                                ));
+                                return Err(UnescapeError::InvalidEscape {
+                                    escape: format!("{}{}", c, c2),
+                                    index: idx,
+                                    string: String::from(s),
+                                });
                             }
                         });
                         continue;
@@ -262,14 +299,14 @@ pub fn unescape(s: &str) -> Result<String, String> {
 // to be advanced to between the 'u' and '{'.
 // It also expects to be passed an iterator which includes the index for the purpose of advancing
 // it  as well, such as is produced by enumerate.
-fn parse_unicode<I>(chars: &mut I) -> Result<char, String>
+fn parse_unicode<I>(chars: &mut I) -> Result<char, ParseUnicodeError>
 where
     I: Iterator<Item = (usize, char)>,
 {
     match chars.next() {
         Some((_, '{')) => {}
         _ => {
-            return Err("expected '{{' character in unicode escape".to_string());
+            return Err(ParseUnicodeError::BraceNotFound);
         }
     }
 
@@ -279,9 +316,12 @@ where
         .collect();
 
     u32::from_str_radix(&unicode_seq, 16)
-        .map_err(|e| format!("could not parse {} as u32 hex: {}", unicode_seq, e))
+        .map_err(|e| ParseUnicodeError::ParseHexFailed {
+            source: e,
+            string: unicode_seq,
+        })
         .and_then(|u| {
-            char::from_u32(u).ok_or_else(|| format!("could not parse {} as a unicode char", u))
+            char::from_u32(u).ok_or_else(|| ParseUnicodeError::ParseUnicodeFailed { value: u })
         })
 }
 
@@ -332,6 +372,39 @@ mod test {
     }
 
     #[test]
+    fn test_unescape_error() {
+        assert_eq!(
+            unescape("\"\\x\""),
+            Err(UnescapeError::InvalidEscape {
+                escape: "\\x".to_string(),
+                index: 2,
+                string: "\"\\x\"".to_string()
+            })
+        );
+        assert_eq!(
+            unescape("\"\\u6771}\""),
+            Err(UnescapeError::InvalidUnicode {
+                source: ParseUnicodeError::BraceNotFound,
+                index: 2,
+                string: "\"\\u6771}\"".to_string()
+            })
+        );
+        // Can't compare ParseIntError directly until 'int_error_matching' becomes stable
+        assert_eq!(
+            format!("{}", unescape("\"\\u{qqqq}\"").err().unwrap()),
+            "\\u could not be parsed at 2 in \"\\u{qqqq}\": could not parse qqqq as u32 hex: invalid digit found in string"
+        );
+        assert_eq!(
+            unescape("\"\\u{ffffffff}\""),
+            Err(UnescapeError::InvalidUnicode {
+                source: ParseUnicodeError::ParseUnicodeFailed { value: 0xffffffff },
+                index: 2,
+                string: "\"\\u{ffffffff}\"".to_string()
+            })
+        );
+    }
+
+    #[test]
     fn test_round_trip() {
         let test_cases = vec![
             "東方",
@@ -353,7 +426,6 @@ mod test {
         }
     }
 
-
     #[test]
     fn test_os_release_parsing() {
         let tests = vec![
@@ -365,8 +437,10 @@ mod test {
 
         for (file, pretty_name) in tests {
             let mut data = String::new();
-            std::fs::File::open(format!("./src/testdata/os-releases/{}", file)).unwrap()
-                .read_to_string(&mut data).unwrap();
+            std::fs::File::open(format!("./src/testdata/os-releases/{}", file))
+                .unwrap()
+                .read_to_string(&mut data)
+                .unwrap();
 
             let mut found_prettyname = false;
             // partial os-release parser
@@ -384,7 +458,10 @@ mod test {
                     found_prettyname = true;
                 }
             }
-            assert!(found_prettyname, "expected os-release to have 'PRETTY_NAME' key");
+            assert!(
+                found_prettyname,
+                "expected os-release to have 'PRETTY_NAME' key"
+            );
         }
     }
 }
