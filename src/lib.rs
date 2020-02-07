@@ -57,6 +57,8 @@ pub fn escape(s: &str) -> Cow<str> {
             // Other whitespace (e.g. '\t') needs double-quoting escaping, but literal spaces only
             // need quoting, not escaping.
             needs_quoting = true;
+        } else if c == ';' {
+            needs_quoting = true;
         } else if c.is_whitespace() || c.is_separator() || c.is_other() {
             single_quotable = false;
             needs_quoting = true;
@@ -347,6 +349,7 @@ mod test {
                 "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}",
                 "\"\\a\\b\\v\\f\\n\\r\\t\\e\\e\\\\'\\\"\"",
             ),
+            ("semi;colon", "'semi;colon'"),
         ];
 
         for (s, expected) in test_cases {
@@ -413,6 +416,7 @@ mod test {
             "\0",
             "\"'",
             "\"'''''\"()())}{{}{}{{{!////",
+            "foo;bar",
         ];
 
         for case in test_cases {
