@@ -17,3 +17,9 @@ thiserror = "1.0"
 [dev-dependencies]
 quickcheck = "0.9"
 quickcheck_macros = "0.9"
+
+[features]
+# This feature enables executing shell commands as part of tests. It's turned
+# off by default.
+unsafe_tests = []
+
