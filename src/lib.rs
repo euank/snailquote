@@ -55,6 +55,28 @@ pub fn escape(s: &str) -> Cow<str> {
             needs_quoting = true;
         } else if c == '"' {
             needs_quoting = true;
+        } else if c == '~' {
+            needs_quoting = true;
+        } else if c == '(' {
+            needs_quoting = true;
+        } else if c == ')' {
+            needs_quoting = true;
+        } else if c == '&' {
+            needs_quoting = true;
+        } else if c == '$' {
+            // $$ in double quotes still expands in sh
+            single_quotable = false;
+            needs_quoting = true;
+        } else if c == '#' {
+            needs_quoting = true;
+        } else if c == '>' {
+            needs_quoting = true;
+        } else if c == '<' {
+            needs_quoting = true;
+        } else if c == '|' {
+            needs_quoting = true;
+        } else if c == '`' {
+            needs_quoting = true;
         } else if c == ' ' {
             // special case; whitespace that can be single quoted.
             // Other whitespace (e.g. '\t') needs double-quoting escaping, but literal spaces only
@@ -334,6 +356,7 @@ where
 mod test {
     use super::*;
     use std::io::Read;
+    use std::process::Command;
 
     #[test]
     fn test_escape() {
@@ -430,6 +453,21 @@ mod test {
     #[quickcheck]
     fn round_trips(s: String) -> bool {
         s == unescape(&escape(&s)).unwrap()
+    }
+
+    #[cfg(feature = "unsafe_tests")]
+    #[quickcheck]
+    fn sh_quoting_round_trips(s: String) -> bool {
+        let s = s.replace(|c: char| c.is_ascii_control() || !c.is_ascii(), "");
+        let escaped = escape(&s);
+        println!("escaped '{}' as '{}'", s, escaped);
+        let output = Command::new("sh").args(vec!["-c", &format!("printf '%s' {}", escaped)]).output().unwrap();
+        if !output.status.success() {
+            panic!("printf %s {} did not exit with success", escaped); 
+        }
+        let echo_output = String::from_utf8(output.stdout).unwrap();
+        println!("printf gave it back as '{}'", echo_output);
+        echo_output == s
     }
 
     #[test]
