@@ -1,6 +1,9 @@
 #[cfg(test)]
-#[macro_use]
 extern crate quickcheck;
+#[cfg(test)]
+#[macro_use(quickcheck)]
+extern crate quickcheck_macros;
+
 extern crate unicode_categories;
 
 use std::borrow::Cow;
@@ -424,10 +427,9 @@ mod test {
         }
     }
 
-    quickcheck! {
-        fn round_trips(s: String) -> bool {
-            s == unescape(&escape(&s)).unwrap()
-        }
+    #[quickcheck]
+    fn round_trips(s: String) -> bool {
+        s == unescape(&escape(&s)).unwrap()
     }
 
     #[test]
