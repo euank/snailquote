@@ -50,42 +50,29 @@ pub fn escape(s: &str) -> Cow<str> {
     let mut single_quotable = true;
 
     for c in s.chars() {
-        if c == '\'' || c == '\\' {
-            single_quotable = false;
-            needs_quoting = true;
-        } else if c == '"' {
-            needs_quoting = true;
-        } else if c == '~' {
-            needs_quoting = true;
-        } else if c == '(' {
-            needs_quoting = true;
-        } else if c == ')' {
-            needs_quoting = true;
-        } else if c == '&' {
-            needs_quoting = true;
-        } else if c == '$' {
-            // $$ in double quotes still expands in sh
-            single_quotable = false;
-            needs_quoting = true;
-        } else if c == '#' {
-            needs_quoting = true;
-        } else if c == '>' {
-            needs_quoting = true;
-        } else if c == '<' {
-            needs_quoting = true;
-        } else if c == '|' {
-            needs_quoting = true;
-        } else if c == '`' {
-            needs_quoting = true;
-        } else if c == ' ' {
-            // special case; whitespace that can be single quoted.
-            // Other whitespace (e.g. '\t') needs double-quoting escaping, but literal spaces only
-            // need quoting, not escaping.
-            needs_quoting = true;
-        } else if c == ';' {
-            needs_quoting = true;
-        } else if c.is_whitespace() || c.is_separator() || c.is_other() {
-            single_quotable = false;
+        let quote = match c {
+            // Special cases, can't be single quoted
+            '\'' | '\\' => {
+                single_quotable = false;
+                true
+            },
+            // ' ' is up here before c.is_whitespace() because it's the only whitespace we can
+            // single quote safely. Things like '\t' need to be escaped.
+            '"' | ' ' => true,
+            // Special characters in shells that can error out or expand if not quoted
+            '(' | ')' | '&' | '~' | '$' | '#' | '`' | ';' => true,
+            // sh globbing chars
+            '*' | '?' | '!' | '[' => true,
+            // redirects / pipes
+            '>' | '<' | '|' => true,
+            c if c.is_whitespace() || c.is_separator() || c.is_other() => {
+                // we need to escape most whitespace (i.e. \t), so we need double quotes.
+                single_quotable = false;
+                true
+            },
+            _ => false,
+        };
+        if quote {
             needs_quoting = true;
         }
         if needs_quoting && !single_quotable {
@@ -356,6 +343,7 @@ where
 mod test {
     use super::*;
     use std::io::Read;
+    #[cfg(feature = "unsafe_tests")]
     use std::process::Command;
 
     #[test]
