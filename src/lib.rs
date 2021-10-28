@@ -1,6 +1,9 @@
 #[cfg(test)]
-#[macro_use]
 extern crate quickcheck;
+#[cfg(test)]
+#[macro_use(quickcheck)]
+extern crate quickcheck_macros;
+
 extern crate unicode_categories;
 
 use std::borrow::Cow;
@@ -47,20 +50,29 @@ pub fn escape(s: &str) -> Cow<str> {
     let mut single_quotable = true;
 
     for c in s.chars() {
-        if c == '\'' || c == '\\' {
-            single_quotable = false;
-            needs_quoting = true;
-        } else if c == '"' {
-            needs_quoting = true;
-        } else if c == ' ' {
-            // special case; whitespace that can be single quoted.
-            // Other whitespace (e.g. '\t') needs double-quoting escaping, but literal spaces only
-            // need quoting, not escaping.
-            needs_quoting = true;
-        } else if c == ';' {
-            needs_quoting = true;
-        } else if c.is_whitespace() || c.is_separator() || c.is_other() {
-            single_quotable = false;
+        let quote = match c {
+            // Special cases, can't be single quoted
+            '\'' | '\\' => {
+                single_quotable = false;
+                true
+            },
+            // ' ' is up here before c.is_whitespace() because it's the only whitespace we can
+            // single quote safely. Things like '\t' need to be escaped.
+            '"' | ' ' => true,
+            // Special characters in shells that can error out or expand if not quoted
+            '(' | ')' | '&' | '~' | '$' | '#' | '`' | ';' => true,
+            // sh globbing chars
+            '*' | '?' | '!' | '[' => true,
+            // redirects / pipes
+            '>' | '<' | '|' => true,
+            c if c.is_whitespace() || c.is_separator() || c.is_other() => {
+                // we need to escape most whitespace (i.e. \t), so we need double quotes.
+                single_quotable = false;
+                true
+            },
+            _ => false,
+        };
+        if quote {
             needs_quoting = true;
         }
         if needs_quoting && !single_quotable {
@@ -331,6 +343,8 @@ where
 mod test {
     use super::*;
     use std::io::Read;
+    #[cfg(feature = "unsafe_tests")]
+    use std::process::Command;
 
     #[test]
     fn test_escape() {
@@ -424,10 +438,24 @@ mod test {
         }
     }
 
-    quickcheck! {
-        fn round_trips(s: String) -> bool {
-            s == unescape(&escape(&s)).unwrap()
+    #[quickcheck]
+    fn round_trips(s: String) -> bool {
+        s == unescape(&escape(&s)).unwrap()
+    }
+
+    #[cfg(feature = "unsafe_tests")]
+    #[quickcheck]
+    fn sh_quoting_round_trips(s: String) -> bool {
+        let s = s.replace(|c: char| c.is_ascii_control() || !c.is_ascii(), "");
+        let escaped = escape(&s);
+        println!("escaped '{}' as '{}'", s, escaped);
+        let output = Command::new("sh").args(vec!["-c", &format!("printf '%s' {}", escaped)]).output().unwrap();
+        if !output.status.success() {
+            panic!("printf %s {} did not exit with success", escaped); 
         }
+        let echo_output = String::from_utf8(output.stdout).unwrap();
+        println!("printf gave it back as '{}'", echo_output);
+        echo_output == s
     }
 
     #[test]

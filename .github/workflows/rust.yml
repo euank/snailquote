@@ -16,4 +16,4 @@ jobs:
     - name: Build
       run: cargo build --verbose --examples
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --features unsafe_tests
