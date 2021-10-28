@@ -1,7 +1,7 @@
 [package]
 name = "snailquote"
 description = "Escape and unescape strings with shell-inspired quoting"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Euan Kemp <euank@euank.com>"]
 homepage = "https://github.com/euank/snailquote"
 repository = "https://github.com/euank/snailquote"

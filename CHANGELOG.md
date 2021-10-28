@@ -1,3 +1,11 @@
+## v0.3.1
+
+### Changes
+
+* Additional characters that have special meanings in shells are now quoted.
+  Specifically, the following characters will now trigger quoting: `;`, `~`,
+  `(`, `)`, `&`, `$`, `#`, `>`, `<`, `|`.
+
 ## v0.3.0
 
 ### Changes
