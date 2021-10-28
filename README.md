@@ -1,6 +1,6 @@
 ## snailquote
 
-[![Build Status](https://travis-ci.org/euank/snailquote.svg?branch=master)](https://travis-ci.org/euank/snailquote)
+[![Build Status](https://github.com/euank/snailquote/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/euank/snailquote/actions/workflows/rust.yml)
 
 [![Docs](https://docs.rs/snailquote/badge.svg)](https://docs.rs/snailquote)
 
