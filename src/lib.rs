@@ -200,7 +200,9 @@ pub enum ParseUnicodeError {
 /// | \"     | \u{22}  | Double quote |
 /// | \$     | \u{24}  | Dollar sign (sh compatibility) |
 /// | \`     | \u{60}  | Backtick (sh compatibility) |
+/// | \0     | \u{00}  | Null byte |
 /// | \u{XX} | \u{XX}  | Unicode character with hex code XX |
+/// | \x{xx} | \u{XX}  | Backwards compatibility byte escaping |
 ///
 /// # Errors
 ///
@@ -264,6 +266,7 @@ pub fn unescape(s: &str) -> Result<String, UnescapeError> {
                             'b' => '\u{08}',
                             'v' => '\u{0B}',
                             'f' => '\u{0C}',
+			    '0' => '\u{00}',
                             'n' => '\n',
                             'r' => '\r',
                             't' => '\t',
@@ -274,7 +277,7 @@ pub fn unescape(s: &str) -> Result<String, UnescapeError> {
                             '$' => '$',
                             '`' => '`',
                             ' ' => ' ',
-                            'u' => parse_unicode(&mut chars).map_err(|x| {
+                            'u' | 'x' => parse_unicode(&mut chars).map_err(|x| {
                                 UnescapeError::InvalidUnicode {
                                     source: x,
                                     index: idx,
@@ -380,9 +383,9 @@ mod test {
         assert_eq!(unescape("'\"'"), Ok("\"".to_string()));
         // Every escape between double quotes
         assert_eq!(
-            unescape("\"\\a\\b\\v\\f\\n\\r\\t\\e\\E\\\\\\'\\\"\\u{09}\\$\\`\""),
+            unescape("\"\\a\\b\\v\\f\\n\\r\\t\\e\\E\\\\\\'\\\"\\u{09}\\x{00}\\0\\$\\`\""),
             Ok(
-                "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}\u{09}$`"
+                "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}\u{09}\u{00}\u{00}$`"
                     .to_string()
             )
         );
@@ -391,11 +394,11 @@ mod test {
     #[test]
     fn test_unescape_error() {
         assert_eq!(
-            unescape("\"\\x\""),
+            unescape("\"\\z\""),
             Err(UnescapeError::InvalidEscape {
-                escape: "\\x".to_string(),
+                escape: "\\z".to_string(),
                 index: 2,
-                string: "\"\\x\"".to_string()
+                string: "\"\\z\"".to_string()
             })
         );
         assert_eq!(
