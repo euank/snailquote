@@ -35,3 +35,9 @@ name = "round_trip"
 path = "fuzz_targets/round_trip.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "escape_quoted"
+path = "fuzz_targets/escape_quoted.rs"
+test = false
+doc = false

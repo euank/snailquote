@@ -88,7 +88,18 @@ pub fn escape(s: &str) -> Cow<str> {
         return format!("'{}'", s).into();
     }
     // otherwise we need to double quote it
+    escape_quoted(s).into()
+}
 
+/// Escape the provided string with shell-like quoting and escapes.
+/// The returned string will have double quotes, even if no escaping is necessary. When passed to
+/// [unescape](unescape), it will return the original input string.
+///
+/// See the documentation on [unescape](unescape) for information on what will be escaped.
+///
+/// Users of this library should prefer the 'escape' function if the resulting string is meant for
+/// user presentation, or where smaller output is desirable.
+pub fn escape_quoted(s: &str) -> String {
     let mut output = String::with_capacity(s.len());
     output.push('"');
 
@@ -112,7 +123,7 @@ pub fn escape(s: &str) -> Cow<str> {
     }
 
     output.push('"');
-    output.into()
+    output
 }
 
 // escape_character is an internal helper method which converts the given unicode character into an
@@ -334,9 +345,7 @@ where
             source: e,
             string: unicode_seq,
         })
-        .and_then(|u| {
-            char::from_u32(u).ok_or(ParseUnicodeError::ParseUnicodeFailed { value: u })
-        })
+        .and_then(|u| char::from_u32(u).ok_or(ParseUnicodeError::ParseUnicodeFailed { value: u }))
 }
 
 #[cfg(test)]
@@ -368,6 +377,31 @@ mod test {
 
         for (s, expected) in test_cases {
             assert_eq!(escape(s), expected);
+        }
+    }
+
+    #[test]
+    fn test_escape_quoetd() {
+        let test_cases = vec![
+            ("東方", "\"東方\""),
+            ("\"'", r#""\"'""#),
+            ("\\", "\"\\\\\""),
+            ("spaces only", "\"spaces only\""),
+            ("some\ttabs", "\"some\\ttabs\""),
+            ("💩", "\"💩\""),
+            ("\u{202e}RTL", "\"\\u{202e}RTL\""),
+            ("no\u{202b}space", "\"no\\u{202b}space\""),
+            ("cash $ money $$ \t", "\"cash \\$ money \\$\\$ \\t\""),
+            ("back ` tick `` \t", "\"back \\` tick \\`\\` \\t\""),
+            (
+                "\u{07}\u{08}\u{0b}\u{0c}\u{0a}\u{0d}\u{09}\u{1b}\u{1b}\u{5c}\u{27}\u{22}",
+                "\"\\a\\b\\v\\f\\n\\r\\t\\e\\e\\\\'\\\"\"",
+            ),
+            ("semi;colon", "\"semi;colon\""),
+        ];
+
+        for (s, expected) in test_cases {
+            assert_eq!(escape_quoted(s), expected);
         }
     }
 
@@ -435,12 +469,18 @@ mod test {
 
         for case in test_cases {
             assert_eq!(unescape(&escape(case)), Ok(case.to_owned()));
+            assert_eq!(unescape(&escape_quoted(case)), Ok(case.to_owned()));
         }
     }
 
     #[quickcheck]
     fn round_trips(s: String) -> bool {
         s == unescape(&escape(&s)).unwrap()
+    }
+
+    #[quickcheck]
+    fn round_trips_quoted(s: String) -> bool {
+        s == unescape(&escape_quoted(&s)).unwrap()
     }
 
     #[quickcheck]
