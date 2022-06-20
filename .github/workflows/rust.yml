@@ -31,4 +31,5 @@ jobs:
         cargo install cargo-fuzz
         cargo fuzz run round_trip -- -runs=100000
         cargo fuzz run escape -- -runs=100000
+        cargo fuzz run escape_quoted -- -runs=100000
         cargo fuzz run unescape -- -runs=100000
