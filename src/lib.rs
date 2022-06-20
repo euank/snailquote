@@ -55,7 +55,7 @@ pub fn escape(s: &str) -> Cow<str> {
             '\'' | '\\' => {
                 single_quotable = false;
                 true
-            },
+            }
             // ' ' is up here before c.is_whitespace() because it's the only whitespace we can
             // single quote safely. Things like '\t' need to be escaped.
             '"' | ' ' => true,
@@ -69,7 +69,7 @@ pub fn escape(s: &str) -> Cow<str> {
                 // we need to escape most whitespace (i.e. \t), so we need double quotes.
                 single_quotable = false;
                 true
-            },
+            }
             _ => false,
         };
         if quote {
@@ -443,15 +443,24 @@ mod test {
         s == unescape(&escape(&s)).unwrap()
     }
 
+    #[quickcheck]
+    fn unescape_no_panics(s: String) {
+        // a panic will fail the test
+        let _ = unescape(&s);
+    }
+
     #[cfg(feature = "unsafe_tests")]
     #[quickcheck]
     fn sh_quoting_round_trips(s: String) -> bool {
         let s = s.replace(|c: char| c.is_ascii_control() || !c.is_ascii(), "");
         let escaped = escape(&s);
         println!("escaped '{}' as '{}'", s, escaped);
-        let output = Command::new("sh").args(vec!["-c", &format!("printf '%s' {}", escaped)]).output().unwrap();
+        let output = Command::new("sh")
+            .args(vec!["-c", &format!("printf '%s' {}", escaped)])
+            .output()
+            .unwrap();
         if !output.status.success() {
-            panic!("printf %s {} did not exit with success", escaped); 
+            panic!("printf %s {} did not exit with success", escaped);
         }
         let echo_output = String::from_utf8(output.stdout).unwrap();
         println!("printf gave it back as '{}'", echo_output);
