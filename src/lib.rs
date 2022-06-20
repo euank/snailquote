@@ -137,7 +137,7 @@ fn escape_character(c: char) -> String {
 }
 
 /// Error type of [unescape](unescape).
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum UnescapeError {
     #[error("invalid escape {escape} at {index} in {string}")]
     InvalidEscape {
@@ -155,7 +155,7 @@ pub enum UnescapeError {
 }
 
 /// Source error type of [UnescapeError::InvalidUnicode](UnescapeError::InvalidUnicode).
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum ParseUnicodeError {
     #[error("expected '{{' character in unicode escape")]
     BraceNotFound,
@@ -335,7 +335,7 @@ where
             string: unicode_seq,
         })
         .and_then(|u| {
-            char::from_u32(u).ok_or_else(|| ParseUnicodeError::ParseUnicodeFailed { value: u })
+            char::from_u32(u).ok_or(ParseUnicodeError::ParseUnicodeFailed { value: u })
         })
 }
 
