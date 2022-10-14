@@ -17,3 +17,18 @@ jobs:
       run: cargo build --verbose --examples
     - name: Run tests
       run: cargo test --verbose --features unsafe_tests
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install latest nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+    - name: Run fuzzing
+      run: |
+        cargo install cargo-fuzz
+        cargo fuzz run round_trip -- -runs=100000
+        cargo fuzz run escape -- -runs=100000
+        cargo fuzz run unescape -- -runs=100000
